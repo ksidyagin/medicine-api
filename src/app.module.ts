@@ -1,5 +1,5 @@
 import { MailerModule } from '@nestjs-modules/mailer';
-import { Module } from '@nestjs/common';
+import { CacheModule, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm/dist';
 import { AppController } from './app.controller';
@@ -63,7 +63,8 @@ import { NurseModule } from './modules/nurse/nurse.module';
     DistrictModule,
     PatientModule,
     NurseModule,
-    ProfilesModule
+    ProfilesModule,
+    CacheModule.register()
     
   ],
   controllers: [AppController],

@@ -1,4 +1,4 @@
-import { BadRequestException, HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { BadRequestException, CACHE_MANAGER, HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm/dist';
 import { from, Observable, throwError } from 'rxjs';
 import { AuthService } from 'src/modules/auth/services/auth.service';
@@ -144,6 +144,14 @@ export class UserService {
             return result;
           })
       )
+    }
+
+  async getById(id: number) {
+    const user = await this.userRepository.findOne({ id });
+    if (user) {
+      return user;
+    }
+    throw new HttpException('User with this id does not exist', HttpStatus.NOT_FOUND);
   }
 
   findAll(): Observable<User[]> {
@@ -206,10 +214,11 @@ export class UserService {
 
 
 
-  login(user: User): Observable<string> {
-      return this.validateUser(user.email, user.password).pipe(
+    async getProfile(userId: number) {
+      return from (this.userRepository.findOne(userId)).pipe(
           switchMap((user: User) => {
               if(user){
+                user.password = null;
                 let profiles: Profiles[];
                 let patient_entry;
                 return from(this.profilesRepos.find({ where: { user_id: user.id} })).pipe(
@@ -219,7 +228,6 @@ export class UserService {
                             if(profiles[i].profile_type === 'patient'){
                                 return from(this.patientRepos.findOne(profiles[i].profile_id)).pipe(
                                     switchMap((patient)=>{
-                                        console.log(patient);
                                         return this.authService.generateJWT({user, patient}).pipe(map((jwt: string) => jwt));
                                     })
                                 )
@@ -227,13 +235,11 @@ export class UserService {
                             else if (profiles[i].profile_type === 'nurse'){
                                 return from(this.nurseRepos.findOne(profiles[i].profile_id)).pipe(
                                     switchMap((nurse)=>{
-                                        console.log(nurse);
                                         return this.authService.generateJWT({user, nurse}).pipe(map((jwt: string) => jwt));
                                     })
                                 )
                             }
                         }
-                        console.log(profiles)
 
                         
                     })
@@ -296,6 +302,7 @@ export class UserService {
   findByEmail(email: string): Observable<User> {
       return from(this.userRepository.findOne({email}));
   }
+
 
   findUserByEmail(email: string): Observable<User> {
     return this.findByEmail(email).pipe(

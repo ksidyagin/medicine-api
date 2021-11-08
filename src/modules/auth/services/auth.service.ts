@@ -1,5 +1,5 @@
 import { MailerService } from '@nestjs-modules/mailer';
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { from, Observable, of } from 'rxjs';
 import { TokenVerify } from 'src/modules/token/models/token-verify.interface';
@@ -12,6 +12,9 @@ import * as moment from 'moment';
 import { SignOptions } from 'jsonwebtoken';
 import { UserEntity } from 'src/modules/user/models/user.entity';
 import { TokenVerifyEntity } from 'src/modules/token/models/token-verify.entity';
+import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 
 
 export class EmailSend {
@@ -21,7 +24,32 @@ export class EmailSend {
 @Injectable()
 export class AuthService {
     constructor(private readonly jwtService: JwtService, private tokenService: TokenService,
-    private mailerService: MailerService){}
+        @InjectRepository(UserEntity) private readonly userRepository: Repository<UserEntity>,
+    private mailerService: MailerService, private readonly configService: ConfigService){}
+
+    public async getAuthenticatedUser(email: string, hashedPassword: string) {
+        try {
+            const user = await this.userRepository.findOne({ email });
+            if (!user) {
+                throw new HttpException('User with this email does not exist', HttpStatus.NOT_FOUND);
+            }
+          const isPasswordMatching = await bcrypt.compare(
+            hashedPassword,
+            user.password
+          );
+          if (!isPasswordMatching) {
+            throw new HttpException('Wrong credentials provided', HttpStatus.BAD_REQUEST);
+          }
+          user.password = undefined;
+          return user;
+        } catch (error) {
+          throw new HttpException('Wrong credentials provided', HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    public getCookieForLogOut() {
+        return `Authentication=; HttpOnly; Path=/; Max-Age=0`;
+    }
 
     generateJWT(user: any): Observable<string> {
         return from(this.jwtService.signAsync({user}));
@@ -59,6 +87,12 @@ export class AuthService {
 
     private generateToken(data: ITokenPayload, options?: SignOptions): string {
         return this.jwtService.sign(data, options);
+    }
+
+    public getCookieWithJwtToken(userId: number) {
+        const payload = { userId: userId };
+        const token = this.jwtService.sign(payload);
+        return `Authentication=${token}; HttpOnly; Path=/; Max-Age=600`;
     }
 
     sendEmail(user: UserEntity) {

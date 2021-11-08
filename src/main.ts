@@ -1,10 +1,12 @@
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 var cors = require('cors')
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.use(cors());
+  app.use(cookieParser());
   const config = new DocumentBuilder()
   .setTitle('api-carwash')
   .setDescription('description')

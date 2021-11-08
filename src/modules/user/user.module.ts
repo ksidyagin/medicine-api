@@ -1,4 +1,4 @@
-import { forwardRef, Module } from '@nestjs/common';
+import { CacheModule, forwardRef, Module } from '@nestjs/common';
 import { UserService } from './service/user.service';
 import { UserController } from './controller/user.controller';
 import { TypeOrmModule } from '@nestjs/typeorm/dist';
@@ -20,7 +20,9 @@ import { NurseModule } from '../nurse/nurse.module';
     forwardRef(() => TokenModule),
     forwardRef(() => ProfilesModule),
     forwardRef(()=> PatientModule),
-    forwardRef(()=> NurseModule)
+    forwardRef(()=> NurseModule),
+    CacheModule.register()
+
 
   ],
   providers: [UserService],

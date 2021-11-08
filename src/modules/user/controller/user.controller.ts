@@ -1,22 +1,30 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query, UseGuards, ValidationPipe } from '@nestjs/common';
+import { Body, Request , Controller, Delete, Get, HttpCode, Param, Post, Put, Query, UseGuards, ValidationPipe, Res, Req, Inject, CACHE_MANAGER } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { InjectRepository } from '@nestjs/typeorm';
 import { access } from 'fs';
+import jwtDecode from 'jwt-decode';
 import { Pagination } from 'nestjs-typeorm-paginate';
 import { Observable, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { hasRoles } from 'src/modules/auth/decorator/roles.decorator';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-guard';
+import { LocalAuthenticationGuard } from 'src/modules/auth/guards/localAuthentication.guard';
 import { RolesGuard } from 'src/modules/auth/guards/roles.guard';
 import { AuthService, EmailSend } from 'src/modules/auth/services/auth.service';
+import { Repository } from 'typeorm';
+import RequestWithUser from '../models/requestWithUser';
+import { UserEntity } from '../models/user.entity';
 import { User, UserRole } from '../models/user.interface';
 import { ConfirmAccountDto } from '../service/accountConfirm';
 import { CarwashPayload, UserService } from '../service/user.service';
-
+import { Response } from 'express';
+import {Cache} from 'cache-manager';
 @ApiTags('users')
 @Controller('users')
 export class UserController {
 
-    constructor(private userService: UserService, private authService: AuthService) {}
+    constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache, private userService: UserService, private authService: AuthService, @InjectRepository(UserEntity) private readonly userRepository: Repository<UserEntity>) {}
 
     @Post('registration')
     async create(@Body()user: User): Promise<Observable<User | Object>> {
@@ -38,14 +46,64 @@ export class UserController {
     // }
 
 
+    @UseGuards(LocalAuthenticationGuard)
     @Post('login')
-    login(@Body()user: User): Observable<Object> {
-        return this.userService.login(user).pipe(
-            map((jwt: string) => {return {access_token: jwt}  
-        }),
-        catchError(err => of({ error: err.message}))
-        )
+    async logIn(@Req() request: RequestWithUser, @Res() response: Response) {
+      const {user} = request;
+      await this.cacheManager.reset();
+      await this.cacheManager.set('access_token', user.id, { ttl: 1200 });
+      return response.send(true);
     }
+
+    // @UseGuards(JwtAuthGuard)
+    @Get('auth')
+    async authenticate() {
+        const value = await this.cacheManager.get('access_token');
+        if(value != undefined){
+            console.log(value);
+            return {authenticated:true};
+        }
+        else{
+            return {authenticated:false};
+        }
+    }
+
+    @Get('getUser')
+    async getUser() {
+        const value:number = await this.cacheManager.get('access_token');
+        if(value != undefined){
+            return (await this.userService.getProfile(value)).pipe(
+                map((user) => {
+                    let token = {
+                        token: user
+                    };
+                    return token;
+                }),
+                catchError(err => of({error: err.message}))
+            );
+        }
+        else{
+            return {authenticated:false};
+        }
+    }
+
+    @Post('logout')
+    async logOut(@Req() request: RequestWithUser, @Res() response: Response) {
+    response.setHeader('Set-Cookie', this.authService.getCookieForLogOut());
+    return response.sendStatus(200);
+    }
+
+    // @UseGuards(AuthGuard('jwt'))
+    // @Post('refresh')
+    // async refresh(@Body()body: any) {
+    // const token: any = jwtDecode(body.accessToken);
+    // const admin =  await this.userRepository.findOne(token.user.user.id);
+    // return this.userService.login(admin).pipe(
+    //     map((jwt: string) => {return {access_token: jwt}  
+    // }),
+    // catchError(err => of({ error: err.message}))
+    // )
+    // }
 
     // @Post('loginSuperAdmin')
     // loginSuperAdmin(@Body()user: User): Observable<Object> {
